@@ -1,0 +1,44 @@
+name: Fortify SAST Scan
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  Fortify-SAST:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Set up Maven
+        uses: stCarolas/setup-maven@v5
+        with:
+          maven-version: 3.9.6
+
+      - name: Package with ScanCentral
+        shell: cmd
+        run: |
+          "C:\Fortify\scan_central\Fortify_ScanCentral_Client_26.2.0_x64\bin\scancentral.bat" package -bt mvn -o package.zip
+
+      - name: Submit Scan to ScanCentral
+        shell: cmd
+        run: |
+          "C:\Fortify\scan_central\Fortify_ScanCentral_Client_26.2.0_x64\bin\scancentral.bat" -url http://localhost:8086/scancentral-ctrl start -upload -application WebGoat -version main -uptoken ${{ secrets.SSC_TOKEN }} -package package.zip -block -f results.fpr
+
+      - name: Upload FPR to SSC
+        shell: cmd
+        run: |
+          "C:\Fortify\fcli\fcli.exe" ssc session login --url ${{ secrets.SSC_URL }} -t ${{ secrets.SSC_TOKEN }} --ssc-session gha --disable sc-dast
+          "C:\Fortify\fcli\fcli.exe" ssc artifact upload -f results.fpr --av WebGoat:main --ssc-session gha
+          "C:\Fortify\fcli\fcli.exe" ssc session logout --ssc-session gha
